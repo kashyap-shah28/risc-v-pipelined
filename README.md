@@ -14,19 +14,3 @@ Multiply and Divide Support: 8-bit using Booth's Algorithm for multiplication an
 2KB Instruction Memory and 8KB Data Memory, both preloaded from external files.
 1 GHz Clock Speed (1ns cycle period).
 
-
-riscv-processor/
-├── alu.v                    # ALU implementation (Booth multiplier, division)
-├── pipeline_datapath.v      # Top-level module (connects all stages)
-├── decode.v                 # Instruction decode stage
-├── fetch.v                  # Instruction fetch stage
-├── memory.v                 # Memory access stage
-├── writeback.v              # Writeback stage
-├── register_file.mem        # Register file data (32 registers)
-├── testbench.v              # Testbench for simulation
-├── hazard_detection_unit.v  # hazard detection unit
-├── forwarding.v             # forwarding unit
-├── branch_prediction.v      # branch predictor
-├── instruction_mem.mem      # Preloaded instruction memory file
-├── data_mem.mem             # Preloaded data memory file
-└── README.md                # This file
