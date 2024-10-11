@@ -29,9 +29,22 @@ module alu #(
     input wire [DATA_WIDTH-1:0] operand1,
     input wire [DATA_WIDTH-1:0] operand2,
     input wire [3:0] alu_op,
+    input wire [1:0] forward_a,
+    input wire [1:0] forward_b,
+    input wire [DATA_WIDTH-1:0] ex_mem_result,
+    input wire [DATA_WIDTH-1:0] mem_wb_result,
     output reg [DATA_WIDTH-1:0] result,
     output reg zero_flag
 );
+
+    wire [DATA_WIDTH-1:0] alu_input1, alu_input2;
+
+    // Input multiplexers for forwarding
+    assign alu_input1 = (forward_a == 2'b00) ? operand1 :
+                        (forward_a == 2'b10) ? ex_mem_result : mem_wb_result;
+    
+    assign alu_input2 = (forward_b == 2'b00) ? operand2 :
+                        (forward_b == 2'b10) ? ex_mem_result : mem_wb_result;
 
     // Carry Lookahead Adder (4-bit)
     function [4:0] cla_4bit;
@@ -115,50 +128,50 @@ module alu #(
         case (alu_op)
             4'b0000: begin // ADD
                 #DELAY_ALU;
-                {result, zero_flag} = cla_32bit(operand1, operand2, 1'b0);
+                {result, zero_flag} = cla_32bit(alu_input1, alu_input2, 1'b0);
             end
             4'b0001: begin // SUB
                 #DELAY_ALU;
-                {result, zero_flag} = cla_32bit(operand1, ~operand2, 1'b1);
+                {result, zero_flag} = cla_32bit(alu_input1, ~alu_input2, 1'b1);
             end
             4'b0010: begin // AND
                 #DELAY_ALU;
-                result = operand1 & operand2;
+                result = alu_input1 & alu_input2;
                 zero_flag = (result == 0);
             end
             4'b0011: begin // OR
                 #DELAY_ALU;
-                result = operand1 | operand2;
+                result = alu_input1 | alu_input2;
                 zero_flag = (result == 0);
             end
             4'b0100: begin // XOR
                 #DELAY_ALU;
-                result = operand1 ^ operand2;
+                result = alu_input1 ^ alu_input2;
                 zero_flag = (result == 0);
             end
             4'b0101: begin // SLL
                 #DELAY_ALU;
-                result = operand1 << operand2[4:0];
+                result = alu_input1 << alu_input2[4:0];
                 zero_flag = (result == 0);
             end
             4'b0110: begin // SRL
                 #DELAY_ALU;
-                result = operand1 >> operand2[4:0];
+                result = alu_input1 >> alu_input2[4:0];
                 zero_flag = (result == 0);
             end
             4'b0111: begin // SRA
                 #DELAY_ALU;
-                result = $signed(operand1) >>> operand2[4:0];
+                result = $signed(alu_input1) >>> alu_input2[4:0];
                 zero_flag = (result == 0);
             end
             4'b1000: begin // MUL (8-bit)
                 #DELAY_MUL;
-                result = {{16{1'b0}}, booths_multiply(operand1[7:0], operand2[7:0])};
+                result = {{16{1'b0}}, booths_multiply(alu_input1[7:0], alu_input2[7:0])};
                 zero_flag = (result == 0);
             end
             4'b1001: begin // DIV (8-bit)
                 #DELAY_DIV;
-                result = {{16{1'b0}}, simple_divide(operand1[7:0], operand2[7:0])};
+                result = {{16{1'b0}}, simple_divide(alu_input1[7:0], alu_input2[7:0])};
                 zero_flag = (result == 0);
             end
             default: begin
