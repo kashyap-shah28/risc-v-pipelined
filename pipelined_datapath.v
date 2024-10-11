@@ -55,8 +55,13 @@ module pipelined_datapath #(
     wire [REG_ADDR_WIDTH-1:0] rs1, rs2, rd;
     wire mem_read, mem_write, alu_src, reg_write, mem_to_reg, branch, zero;
 
+    // New wires for forwarding and branch prediction
+    wire [1:0] forward_a, forward_b;
+    wire predicted_taken, branch_outcome;
+    wire flush;
+
     // Hazard detection unit
-    wire stall, flush;
+    wire stall;
     hazard_detection_unit hdu (
         .ID_EX_MemRead(ID_EX_MemRead),
         .ID_EX_Rd(ID_EX_Rd),
@@ -65,20 +70,44 @@ module pipelined_datapath #(
         .stall(stall)
     );
 
+    // Forwarding unit
+    forwarding_unit forwarding (
+        .ID_EX_Rs1(ID_EX_Rs1),
+        .ID_EX_Rs2(ID_EX_Rs2),
+        .EX_MEM_Rd(EX_MEM_Rd),
+        .MEM_WB_Rd(MEM_WB_Rd),
+        .EX_MEM_RegWrite(EX_MEM_RegWrite),
+        .MEM_WB_RegWrite(MEM_WB_RegWrite),
+        .ForwardA(forward_a),
+        .ForwardB(forward_b)
+    );
+
+    // Branch predictor
+    branch_predictor bp (
+        .clk(clk),
+        .reset(reset),
+        .pc(pc),
+        .branch_outcome(branch_outcome),
+        .branch_taken(EX_MEM_Zero & EX_MEM_Branch),
+        .predicted_taken(predicted_taken)
+    );
+
     // Fetch stage
     fetch fetch_stage (
         .clk(clk),
         .reset(reset),
         .stall(stall),
-        .branch_target(branch_target),
+        .branch_target(EX_MEM_BranchTarget),
         .branch_taken(EX_MEM_Zero & EX_MEM_Branch),
+        .predicted_taken(predicted_taken),
         .pc(pc),
+        .pc_next(pc_next),
         .instruction(instruction)
     );
 
     // IF/ID Pipeline Register
     always @(posedge clk or posedge reset) begin
-        if (reset) begin
+        if (reset || flush) begin
             IF_ID_PC <= 0;
             IF_ID_Instruction <= 0;
         end else if (!stall) begin
@@ -112,7 +141,7 @@ module pipelined_datapath #(
 
     // ID/EX Pipeline Register
     always @(posedge clk or posedge reset) begin
-        if (reset) begin
+        if (reset || flush) begin
             ID_EX_PC <= 0;
             ID_EX_ReadData1 <= 0;
             ID_EX_ReadData2 <= 0;
@@ -150,8 +179,12 @@ module pipelined_datapath #(
         .operand1(ID_EX_ReadData1),
         .operand2(ID_EX_ALUSrc ? ID_EX_Imm : ID_EX_ReadData2),
         .alu_op(ID_EX_ALUOp),
+        .forward_a(forward_a),
+        .forward_b(forward_b),
+        .ex_mem_result(EX_MEM_ALUResult),
+        .mem_wb_result(write_data),
         .result(alu_result),
-        .zero(zero)
+        .zero_flag(zero)
     );
 
     // EX/MEM Pipeline Register
@@ -168,7 +201,7 @@ module pipelined_datapath #(
             EX_MEM_BranchTarget <= 0;
         end else begin
             EX_MEM_ALUResult <= alu_result;
-            EX_MEM_WriteData <= ID_EX_ReadData2;
+            EX_MEM_WriteData <= ID_EX_ALUSrc ? ID_EX_Imm : ID_EX_ReadData2;
             EX_MEM_Rd <= ID_EX_Rd;
             EX_MEM_MemRead <= ID_EX_MemRead;
             EX_MEM_MemWrite <= ID_EX_MemWrite;
@@ -210,7 +243,13 @@ module pipelined_datapath #(
     assign write_data = MEM_WB_MemtoReg ? MEM_WB_ReadData : MEM_WB_ALUResult;
 
     // Branch logic
-    assign branch_target = EX_MEM_BranchTarget;
+    assign branch_outcome = ID_EX_Branch & zero;
+    assign flush = branch_outcome != predicted_taken;
+
+    // Update branch predictor
+    always @(posedge clk) begin
+        if (ID_EX_Branch)
+            bp.branch_outcome <= branch_outcome;
+    end
 
 endmodule
-
